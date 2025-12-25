@@ -2,8 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const readline = require('readline');
 
-const FIFO_PATH = `/tmp/terminal_time_
-tracker_${process.env.USER}/stream`;
+const FIFO_PATH = `/tmp/terminal_time_tracker_${process.env.USER}/stream`;
 
 // Store connected SSE clients
 const clients = new Set();
@@ -23,25 +22,30 @@ function startFifoReader() {
   });
 }
 
-const server = http.createServer((req,
-  res) => {
-    if (req.url === '/events') {
-      res.writeHead(200, {
-        'Content-Type':
-        'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      });
+const server = http.createServer((req, res) => {
+  if (req.url === '/events') {
+    res.writeHead(200, {
+      'Content-Type':
+      'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
 
-      clients.add(res);
-      req.on('close', () =>
-        clients.delete(res));
-    } else {
-      res.writeHead(200, {
-        'Content-Type': 'text/html' });
-      res.end('<html>...</html>');
-    }
-  });
+    clients.add(res);
+    req.on('close', () =>
+      clients.delete(res));
+  } else {
+    fs.readFile('./index.html',(err,data)=>{
+      if(err){
+        res.writeHead(500);
+        res.end('Error loading page');
+        return;
+      }
+      res.writeHead(200,{'Content-Type':  'text/html'});
+      res.end(data);
+    })   
+  }
+});
 
 server.listen(3000);
 startFifoReader();
