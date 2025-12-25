@@ -54,11 +54,3 @@ function updateChart(data){
   barChart.data.datasets[0].data = sorted.map(([,seconds])=>seconds);
   barChart.update();
 }
-
-const eventSource = new EventSource('/events');
-eventSource.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  if(!barChart) initChart();
-  updateChart(data);
-};
-
