@@ -5,6 +5,34 @@
   </head>
   <body>
     <h1>Welcome to Specter</h1>
-    <p>Your terminal tracking app</p>
+    <div id="stats"></div>
+    <script>
+      const statsDiv = document.getElementById('stats');
+      const eventSource = new EventSource('/events');
+
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        const totals = {};
+        for (const [key, seconds] of
+          Object.entries(data)) {
+          const process = key.split('@')[0];
+          totals[process] = (totals[process] || 0) +
+            seconds;
+        }
+
+        statsDiv.innerHTML = Object.entries(totals)
+          .map(([name, secs]) => `<div>${name}:
+            ${formatTime(secs)}</div>`)
+          .join('');
+      };
+
+      function formatTime(seconds) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+      }
+    </script>
   </body>
 </html>
