@@ -2,37 +2,54 @@
 <html>
   <head>
     <title>Specter</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
   <body>
-    <h1>Welcome to Specter</h1>
-    <div id="stats"></div>
+    <h1>Specter</h1>
+    <canvas id="barChart" style="max-width:800px;"></canvas> 
     <script>
-      const statsDiv = document.getElementById('stats');
-      const eventSource = new EventSource('/events');
-
-      eventSource.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-
-        const totals = {};
-        for (const [key, seconds] of
-          Object.entries(data)) {
-          const process = key.split('@')[0];
-          totals[process] = (totals[process] || 0) +
-            seconds;
-        }
-
-        statsDiv.innerHTML = Object.entries(totals)
-          .map(([name, secs]) => `<div>${name}:
-            ${formatTime(secs)}</div>`)
-          .join('');
-      };
-
+      let barChart;
+      
       function formatTime(seconds) {
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
         const s = seconds % 60;
         return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
       }
+      
+      function initChart(){
+        const ctx = document.getElementById('barChart').getContext('2d');
+        barChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: [],
+            datasets: [{
+              label: 'Time (seconds)',
+              data: [],
+              backgroundColor: 'rgba(75,192,192,0.6)'
+            }]
+          },
+          options: {
+            responsive: true,
+            indexAxis: 'y'
+          }
+        })
+      }
+      
+      function updateChart(data){
+        const sorted = Object.entries(data).sort((a,b)=>b[1]-a[1]);
+
+        barChart.data.labels = sorted.map(([terminal])=>terminal);
+        barChart.data.datasets[0].data = sorted.map(([,seconds])=>seconds);
+        barChart.update();
+      }
+
+      const eventSource = new EventSource('/events');
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if(!barChart) initChart();
+        updateChart(data);
+      };
     </script>
   </body>
 </html>
