@@ -2,8 +2,9 @@
 
 # Configuration
 BASE_DIR="/tmp/terminal_time_tracker_$USER"
-HISTORY_FILE="$HOME/.terminal_time_history"
+HISTORY_JSON="$HOME/.terminal_time_history.jsonl"
 POLL_INTERVAL=1
+SAVE_INTERVAL=300  # Save snapshot every 5 minutes
 THIS_SCRIPT_NAME=$(basename "$0")
 
 GLOBAL_PID_FILE="$BASE_DIR/global.pid"
@@ -20,6 +21,8 @@ format_time() {
 
 global_track_loop() {
   declare -A app_times
+  local last_save=0
+
   if [ -f "$GLOBAL_DATA_FILE" ]; then
     while IFS=':' read -r app seconds; do
       if [ -n "$app" ]; then
@@ -71,8 +74,35 @@ global_track_loop() {
       timeout 0.1 bash -c "echo '$json' > \"$FIFO_PATH\"" 2>/dev/null
     fi
 
+    # Periodic save to JSON history
+    current_time=$(date +%s)
+    if [ $((current_time - last_save)) -ge $SAVE_INTERVAL ]; then
+      save_json_snapshot
+      last_save=$current_time
+    fi
+
     sleep "$POLL_INTERVAL"
   done
+}
+
+save_json_snapshot() {
+  if [ ! -s "$GLOBAL_DATA_FILE" ]; then
+    return
+  fi
+
+  local timestamp=$(date +%s)
+  local date_str=$(date -Iseconds)
+  local json="{\"timestamp\":$timestamp,\"date\":\"$date_str\""
+
+  while IFS=':' read -r app seconds; do
+    if [ -n "$app" ]; then
+      app_escaped=$(echo "$app" | sed 's/"/\\"/g')
+      json+=",\"$app_escaped\":$seconds"
+    fi
+  done <"$GLOBAL_DATA_FILE"
+
+  json+="}"
+  echo "$json" >>"$HISTORY_JSON"
 }
 
 start_tracking() {
@@ -103,39 +133,21 @@ start_tracking() {
 }
 
 stop_tracking() {
-  local persist_flag="$1"
-
   if [ ! -f "$GLOBAL_PID_FILE" ]; then
     echo "Error: Global tracker is not running."
     exit 1
   fi
 
   pid=$(cat "$GLOBAL_PID_FILE")
+  
+  # Save final snapshot before stopping
+  save_json_snapshot
+  
   kill "$pid" 2>/dev/null
   rm "$GLOBAL_PID_FILE"
 
   echo "Global Tracker stopped (PID $pid). All terminal tracking ceased."
-
-  if [ "$persist_flag" == "-p" ]; then
-    if [ -s "$GLOBAL_DATA_FILE" ]; then
-      local current_date=$(date +"%d/%m/%Y %H:%M:%S")
-      echo "Saving session to $HISTORY_FILE..."
-      echo "--- Session: $current_date (GLOBAL) ---" >>"$HISTORY_FILE"
-
-      while IFS=':' read -r app seconds; do
-        if [ -n "$app" ]; then
-          p_time=$(format_time "$seconds")
-          echo "$app: $p_time" >>"$HISTORY_FILE"
-        fi
-      done <"$GLOBAL_DATA_FILE" | sort -k2 -r
-
-      echo "" >>"$HISTORY_FILE"
-    else
-      echo "No data to save."
-    fi
-  else
-    echo "Session discarded (use 'stop -p' to save)."
-  fi
+  echo "Data saved to $HISTORY_JSON"
 
   echo "---------------------------"
   show_stats
@@ -191,13 +203,13 @@ start)
   start_tracking
   ;;
 stop)
-  stop_tracking "$2"
+  stop_tracking
   ;;
 stats | status | report)
   show_stats
   ;;
 *)
-  echo "Usage: $0 {start|stop [-p]|stats}"
+  echo "Usage: $0 {start|stop|stats|status|report}"
   exit 1
   ;;
 esac
